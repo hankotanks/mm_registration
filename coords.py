@@ -11,6 +11,8 @@ GCG2016_FILE = 'GCG2016v2023.tif'
 GCG2016_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), GCG2016_FILE)
 
 class Ellipsoid:
+    # any value other than 32 is not really supported unless the quasigeoid is switched out
+    # for a larger geotiff that covers that zone
     def __init__(self, a, f, Z = 32):
         self.a = a
         self.f = f
@@ -29,13 +31,13 @@ class Ellipsoid:
         return self.a / np.sqrt(1.0 - self.e_fst_sq * np.sin(phi)**2)
 
     # pos: [x, y, z] in CRS
-    def cartesian_to_ellipsoidal(self, pos, eps = 1e-4):
-        lam = np.arctan(pos[1] / pos[0])
+    def cartesian_to_ellipsoidal(self, xyz, eps = 1e-4):
+        lam = np.arctan(xyz[1] / xyz[0])
 
-        p = np.sqrt(pos[0]**2 + pos[1]**2)
+        p = np.sqrt(xyz[0]**2 + xyz[1]**2)
 
         alt = [None, 0.0]
-        phi = [None, np.arctan(pos[2] * (1.0 + self.e_snd_sq) / p)]
+        phi = [None, np.arctan(xyz[2] * (1.0 + self.e_snd_sq) / p)]
 
         cond = lambda v, s: (np.abs(np.diff(v)[0]) * s > eps)
         while (alt[0] is None or phi[0] is None) or (cond(phi, 1.0) or cond(alt, 1.0)):
@@ -45,7 +47,7 @@ class Ellipsoid:
             n = self.N(phi[0])
 
             alt_t = p / np.cos(phi[0]) - n
-            phi_t = np.arctan(pos[2] / p * (n + alt[0]) / ((n / (1.0 + self.e_snd_sq) + alt[0])))
+            phi_t = np.arctan(xyz[2] / p * (n + alt[0]) / ((n / (1.0 + self.e_snd_sq) + alt[0])))
 
             alt.append(alt_t)
             phi.append(phi_t)
@@ -53,10 +55,11 @@ class Ellipsoid:
         return np.array([lam, phi[-1], alt[-1]])
 
     # pos: [lon, lat, alt] in radians
-    def ellipsoidal_to_utm(self, pos):
-        if self.gcg is None: self.gcg = rasterio.open(GCG2016_PATH)
+    def ellipsoidal_to_utm(self, lon_lat_alt):
+        if self.gcg is None: 
+            self.gcg = rasterio.open(GCG2016_PATH)
 
-        [lon, lat, alt] = pos
+        [lon, lat, alt] = lon_lat_alt
 
         L_rad = np.deg2rad(lon)
         B_rad = np.deg2rad(lat)
@@ -106,3 +109,33 @@ class Ellipsoid:
         return np.array([E, N, H])
 
 ETRS89_DE = Ellipsoid(6378137.0, np.reciprocal(298.2572221008827112431628366), Z = 32)
+
+def export_as_kml(path_out, lon_lat_alt, export_count = 1_000):
+    assert path_out[-4:] == ".kml"
+    assert lon_lat_alt.shape[0] > 0 and lon_lat_alt.shape[1] == 3
+
+    # google earth only supports 10_000 points
+    if lon_lat_alt.shape[0] > export_count:
+        pts_idx = np.linspace(0, lon_lat_alt.shape[0] - 1, export_count, dtype = int)
+        lon_lat_alt = lon_lat_alt[pts_idx, :]
+
+    with open(path_out, 'w') as f:
+        f.write(r'''<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">''')
+
+        f.write(r'''
+    <Placemark>
+        <name>%s</name>
+        <LineString>
+            <coordinates>''' % os.path.basename(path_out)[:-4])
+        for i in range(0, lon_lat_alt.shape[0]):
+            f.write(r'''
+                %s,%s,%s''' % (('%f' % lon_lat_alt[i, 0])[0:], ('%f' % lon_lat_alt[i, 1])[0:], ('%f' % lon_lat_alt[i, 2])[0:]))
+        f.write(r'''
+            </coordinates>
+        </LineString>
+    </Placemark>''')
+    
+        f.write(r'''
+</kml>
+''')

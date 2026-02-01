@@ -49,6 +49,8 @@ class Trajectory:
         ellipsoid = coords.ETRS89_DE,
         # offset in seconds s.t. t_scan = t_traj - offset
         traj_to_bin_offset = 0.0, 
+        # whether or not to write trajectory to a KML file
+        traj_export_as_kml = False,
         # 1 = best, 6 = worst
         quality_threshold = 2,
         # imu to antenna
@@ -84,6 +86,7 @@ class Trajectory:
                         print(f"Skipping entry {len(traj_raw)}. Incorrect number of columns")
                         continue
                     try:
+                        count += 1
                         if int(cols[11]) > quality_threshold: continue
                         traj_raw.append([
                             np.float64(cols[0]), # time
@@ -99,19 +102,19 @@ class Trajectory:
             
             if len(traj_raw) == 0:
                 raise RuntimeError(f"Failed to load trajectory: {os.path.basename(path_traj_raw)}")
-
-            print(f"Loaded {len(traj_raw)} poses")
             
             traj_raw = np.vstack(traj_raw)
-
             # ensure trajectory is sorted by timestamp before returning
-            return traj_raw[traj_raw[:, 0].argsort()]
+            traj_raw = traj_raw[traj_raw[:, 0].argsort()]
+
+            print(f"Loaded {len(traj_raw)} poses across {traj_raw[-1, 0] - traj_raw[0, 0]} seconds")
+
+            return traj_raw
 
         file_traj = os.path.basename(path_traj_raw)[:-4] + ".npy"
         path_traj = os.path.join(os.path.dirname(os.path.abspath(__file__)), file_traj)
 
-        self.traj = None
-
+        self.traj, traj_raw = None, None
         if not os.path.exists(path_traj):
             traj_raw = load_traj_raw()
             self.traj = np.copy(traj_raw)
@@ -131,6 +134,16 @@ class Trajectory:
 
         if self.traj is None:
             raise RuntimeError(f"Failed to load trajectory: {os.path.basename(path_traj_raw)}")
+
+        if traj_export_as_kml:
+            if traj_raw is None:
+                traj_raw = load_traj_raw()
+
+            file_kml = self.name + ".kml"
+            path_kml = os.path.join(self.path_out, file_kml)
+            coords.export_as_kml(path_kml, traj_raw[:, [2, 1, 3]])
+
+            print(f"Exported trajectory: {file_kml}")
 
         self.slerps = []
         for i in tqdm.tqdm(range(1, self.traj.shape[0]), desc = "Precomputing SLERPs"):
