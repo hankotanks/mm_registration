@@ -37,7 +37,7 @@ if args.output is not None and not os.path.exists(args.output):
 # this (and the process_bin invocation) should be the only place(s) with hard-coded values
 traj = dataloader.Trajectory(args.path_traj, args.output,
     traj_to_bin_offset = 86418.0, 
-    traj_export_as_kml = True,
+    traj_export_as_kml = False,
     T_AI = np.array([-0.183, 0.0, 0.339]), 
     R_BS = transform.Rotation.from_euler('xyz', [0.1141, 29.5157, -0.1194], degrees = True).as_matrix())
 

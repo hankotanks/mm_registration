@@ -80,13 +80,13 @@ class Trajectory:
             with open(path_traj_raw, 'r') as f:
                 for line in f:
                     line = line.strip()
-                    if not line or not line[0].isdigit() or ':' in line: continue
+                    if not line or not line[0].isdigit():
+                        continue
                     cols = re.split(r'\s+', line)
                     if len(cols) != 19: 
-                        print(f"Skipping entry {len(traj_raw)}. Incorrect number of columns")
+                        print(f"Incorrect number of columns (expected: 19, found: {len(cols)})")
                         continue
                     try:
-                        count += 1
                         if int(cols[11]) > quality_threshold: continue
                         traj_raw.append([
                             np.float64(cols[0]), # time
@@ -160,7 +160,6 @@ class Trajectory:
                     transform.Rotation.from_euler('xyz', rpy1)])))
 
     def process_points(self, pts, out_format = "ply"):
-        print(f"{pts.shape[0]}")
         assert pts.shape[0] > 0 and pts.shape[1] == 4
         OUT_FORMAT_OPTIONS = ["ply", "las"]
         assert out_format in OUT_FORMAT_OPTIONS
